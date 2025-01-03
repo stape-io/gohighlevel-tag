@@ -1,8 +1,17 @@
 # GoHighLevel tag for Google Tag Manager Server Side
 
-## How to use the GoHighLevel tag:
+The GoHighLevel tag for the server GTM communicates with the GoHighLevel API.
 
-TBD
+#### You can use this tag for:
+
+- Create new contacts
+- Track events (comming soon)
+
+## How to use GoHighLevel tag
+
+1. Add GoHighLevel tag to the server GTM.
+2. Add GoHighLevel API Key.
+4. Add contact email and phone.
 
 ## Open Source
 
