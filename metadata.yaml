@@ -1,6 +1,8 @@
 homepage: "https://stape.io/"
 documentation: "https://github.com/stape-io/gohighlevel-tag"
 versions:
+  - sha: 65211ca418d5dadf505a3b779acae0cce395ef2e
+    changeNotes: Fix additional contact data not being added to the request payload. Added some tests. Added BigQuery logging.
   - sha: 65eaa4c4a7c87c0bfadcf9126dae41cc954b0533
     changeNotes: Fix tag naming.
   - sha: ebc1c5b6d7349e3d221adff1b4b8bbae39f7fdfb
