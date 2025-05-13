@@ -37,6 +37,13 @@ ___TEMPLATE_PARAMETERS___
     "help": "More info about how to get Location API Key can be found \u003ca href\u003d\"https://help.gohighlevel.com/support/solutions/articles/48001060529-highlevel-api#Where-To-Find-The-Agency-\u0026-Location-API-Keys\" target\u003d\"_blank\"\u003eby this link\u003c/a\u003e."
   },
   {
+    "type": "CHECKBOX",
+    "name": "useOptimisticScenario",
+    "checkboxText": "Use Optimistic Scenario",
+    "simpleValueType": true,
+    "help": "The tag will call gtmOnSuccess() without waiting for a response from the API. This will speed up sGTM response time however your tag will always return the status fired successfully even in case it is not."
+  },
+  {
     "type": "GROUP",
     "name": "contactGroup",
     "displayName": "Contact",
@@ -80,10 +87,35 @@ ___TEMPLATE_PARAMETERS___
     ]
   },
   {
-    "displayName": "Logs Settings",
-    "name": "logsGroup",
-    "groupStyle": "ZIPPY_CLOSED",
     "type": "GROUP",
+    "name": "consentSettingsGroup",
+    "displayName": "Consent Settings",
+    "groupStyle": "ZIPPY_CLOSED",
+    "subParams": [
+      {
+        "type": "RADIO",
+        "name": "adStorageConsent",
+        "displayName": "",
+        "radioItems": [
+          {
+            "value": "optional",
+            "displayValue": "Send data always"
+          },
+          {
+            "value": "required",
+            "displayValue": "Send data in case marketing consent given"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "optional"
+      }
+    ]
+  },
+  {
+    "type": "GROUP",
+    "name": "logsGroup",
+    "displayName": "Logs Settings",
+    "groupStyle": "ZIPPY_CLOSED",
     "subParams": [
       {
         "type": "RADIO",
@@ -106,6 +138,73 @@ ___TEMPLATE_PARAMETERS___
         "defaultValue": "debug"
       }
     ]
+  },
+  {
+    "displayName": "BigQuery Logs Settings",
+    "name": "bigQueryLogsGroup",
+    "groupStyle": "ZIPPY_CLOSED",
+    "type": "GROUP",
+    "subParams": [
+      {
+        "type": "RADIO",
+        "name": "bigQueryLogType",
+        "radioItems": [
+          {
+            "value": "no",
+            "displayValue": "Do not log to BigQuery"
+          },
+          {
+            "value": "always",
+            "displayValue": "Log to BigQuery"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "no"
+      },
+      {
+        "type": "GROUP",
+        "name": "logsBigQueryConfigGroup",
+        "groupStyle": "NO_ZIPPY",
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "logBigQueryProjectId",
+            "displayName": "BigQuery Project ID",
+            "simpleValueType": true,
+            "help": "Optional.  \u003cbr\u003e\u003cbr\u003e  If omitted, it will be retrieved from the environment variable \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e where the server container is running. If the server container is running on Google Cloud, \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e will already be set to the Google Cloud project\u0027s ID."
+          },
+          {
+            "type": "TEXT",
+            "name": "logBigQueryDatasetId",
+            "displayName": "BigQuery Dataset ID",
+            "simpleValueType": true,
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          },
+          {
+            "type": "TEXT",
+            "name": "logBigQueryTableId",
+            "displayName": "BigQuery Table ID",
+            "simpleValueType": true,
+            "valueValidators": [
+              {
+                "type": "NON_EMPTY"
+              }
+            ]
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "bigQueryLogType",
+            "paramValue": "always",
+            "type": "EQUALS"
+          }
+        ]
+      }
+    ]
   }
 ]
 
@@ -115,65 +214,80 @@ ___SANDBOXED_JS_FOR_SERVER___
 const sendHttpRequest = require('sendHttpRequest');
 const JSON = require('JSON');
 const getRequestHeader = require('getRequestHeader');
+const getAllEventData = require('getAllEventData');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
 const logToConsole = require('logToConsole');
 const getContainerVersion = require('getContainerVersion');
 const makeTableMap = require('makeTableMap');
+const BigQuery = require('BigQuery');
 
-const containerVersion = getContainerVersion();
-const isDebug = containerVersion.debugMode;
-const isLoggingEnabled = determinateIsLoggingEnabled();
+/**********************************************************************************************/
+
 const traceId = getRequestHeader('trace-id');
+
+const eventData = getAllEventData();
+
+if (!isConsentGivenOrNotRequired()) {
+  return data.gtmOnSuccess();
+}
+
+const url = eventData.page_location || getRequestHeader('referer');
+if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
+  return data.gtmOnSuccess();
+}
 
 createContact();
 
+if (data.useOptimisticScenario) {
+  return data.gtmOnSuccess();
+}
+
+/**********************************************************************************************/
+// Helpers
+
 function createContact() {
   const requestUrl = 'https://rest.gohighlevel.com/v1/contacts/';
-  const postBody = makeTableMap(data.person || [], 'field', 'value') || {};
+  const postBody = makeTableMap(data.contact || [], 'field', 'value') || {};
 
   if (data.email) postBody.email = data.email;
   if (data.phone) postBody.phone = data.phone;
 
-  if (isLoggingEnabled) {
-    logToConsole(
-      JSON.stringify({
-        Name: 'GoHighLevel',
-        Type: 'Request',
-        TraceId: traceId,
-        EventName: 'Person',
-        RequestMethod: 'POST',
-        RequestUrl: requestUrl,
-        RequestBody: postBody
-      })
-    );
-  }
+  log({
+    Name: 'GoHighLevel',
+    Type: 'Request',
+    TraceId: traceId,
+    EventName: 'Contact',
+    RequestMethod: 'POST',
+    RequestUrl: requestUrl,
+    RequestBody: postBody
+  });
 
   return sendHttpRequest(
     requestUrl,
     (statusCode, headers, body) => {
-      if (isLoggingEnabled) {
-        logToConsole(
-          JSON.stringify({
-            Name: 'GoHighLevel',
-            Type: 'Response',
-            TraceId: traceId,
-            EventName: 'Person',
-            ResponseStatusCode: statusCode,
-            ResponseHeaders: headers,
-            ResponseBody: body
-          })
-        );
-      }
+      log({
+        Name: 'GoHighLevel',
+        Type: 'Response',
+        TraceId: traceId,
+        EventName: 'Contact',
+        ResponseStatusCode: statusCode,
+        ResponseHeaders: headers,
+        ResponseBody: body
+      });
 
-      if (statusCode >= 200 && statusCode < 303) {
-        data.gtmOnSuccess();
-      } else {
-        data.gtmOnFailure();
+      if (!data.useOptimisticScenario) {
+        if (statusCode >= 200 && statusCode < 303) {
+          data.gtmOnSuccess();
+        } else {
+          data.gtmOnFailure();
+        }
       }
     },
     {
       headers: {
-        'Authorization': 'Bearer '+ data.apiKey,
-        'Accept': 'application/json',
+        Authorization: 'Bearer ' + data.apiKey,
+        Accept: 'application/json',
         'Content-Type': 'application/json'
       },
       method: 'POST'
@@ -182,7 +296,87 @@ function createContact() {
   );
 }
 
+/**********************************************************************************************/
+// Helpers
+
+function isConsentGivenOrNotRequired() {
+  if (data.adStorageConsent !== 'required') return true;
+  if (eventData.consent_state) return !!eventData.consent_state.ad_storage;
+  const xGaGcs = eventData['x-ga-gcs'] || ''; // x-ga-gcs is a string like "G110"
+  return xGaGcs[2] === '1';
+}
+
+function log(rawDataToLog) {
+  const logDestinationsHandlers = {};
+  if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
+  if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
+
+  // Key mappings for each log destination
+  const keyMappings = {
+    // No transformation for Console is needed.
+    bigQuery: {
+      Name: 'tag_name',
+      Type: 'type',
+      TraceId: 'trace_id',
+      EventName: 'event_name',
+      RequestMethod: 'request_method',
+      RequestUrl: 'request_url',
+      RequestBody: 'request_body',
+      ResponseStatusCode: 'response_status_code',
+      ResponseHeaders: 'response_headers',
+      ResponseBody: 'response_body'
+    }
+  };
+
+  for (const logDestination in logDestinationsHandlers) {
+    const handler = logDestinationsHandlers[logDestination];
+    if (!handler) continue;
+
+    const mapping = keyMappings[logDestination];
+    const dataToLog = mapping ? {} : rawDataToLog;
+    // Map keys based on the log destination
+    if (mapping) {
+      for (const key in rawDataToLog) {
+        const mappedKey = mapping[key] || key; // Fallback to original key if no mapping exists
+        dataToLog[mappedKey] = rawDataToLog[key];
+      }
+    }
+
+    handler(dataToLog);
+  }
+}
+
+function logConsole(dataToLog) {
+  logToConsole(JSON.stringify(dataToLog));
+}
+
+function logToBigQuery(dataToLog) {
+  const connectionInfo = {
+    projectId: data.logBigQueryProjectId,
+    datasetId: data.logBigQueryDatasetId,
+    tableId: data.logBigQueryTableId
+  };
+
+  // timestamp is required.
+  dataToLog.timestamp = getTimestampMillis();
+
+  // Columns with type JSON need to be stringified.
+  ['request_body', 'response_headers', 'response_body'].forEach((p) => {
+    // GTM Sandboxed JSON.parse returns undefined for malformed JSON but throws post-execution, causing execution failure.
+    // If fixed, could use: dataToLog[p] = JSON.stringify(JSON.parse(dataToLog[p]) || dataToLog[p]);
+    dataToLog[p] = JSON.stringify(dataToLog[p]);
+  });
+
+  // assertApi doesn't work for 'BigQuery.insert()'. It's needed to convert BigQuery into a function when testing.
+  // Ref: https://gtm-gear.com/posts/gtm-templates-testing/
+  const bigquery = getType(BigQuery) === 'function' ? BigQuery() /* Only during Unit Tests */ : BigQuery;
+  bigquery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
+}
+
 function determinateIsLoggingEnabled() {
+  const containerVersion = getContainerVersion();
+  const isDebug = !!(containerVersion && (containerVersion.debugMode || containerVersion.previewMode));
+
   if (!data.logType) {
     return isDebug;
   }
@@ -196,6 +390,11 @@ function determinateIsLoggingEnabled() {
   }
 
   return data.logType === 'always';
+}
+
+function determinateIsLoggingEnabledForBigQuery() {
+  if (data.bigQueryLogType === 'no') return false;
+  return data.bigQueryLogType === 'always';
 }
 
 
@@ -226,6 +425,21 @@ ___SERVER_PERMISSIONS___
                   {
                     "type": 1,
                     "string": "trace-id"
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "headerName"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "referer"
                   }
                 ]
               }
@@ -330,17 +544,230 @@ ___SERVER_PERMISSIONS___
       "isEditedByUser": true
     },
     "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "read_event_data",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "eventDataAccess",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_bigquery",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "allowedTables",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "projectId"
+                  },
+                  {
+                    "type": 1,
+                    "string": "datasetId"
+                  },
+                  {
+                    "type": 1,
+                    "string": "tableId"
+                  },
+                  {
+                    "type": 1,
+                    "string": "operation"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
   }
 ]
 
 
 ___TESTS___
 
-scenarios: []
+scenarios:
+- name: Contact - All Data Defined in the UI is sent in the request
+  code: |-
+    const expectedApiKey = 'expectedApiKey';
+    mockData.apiKey = expectedApiKey;
+    const expectedEmail = 'expectedEmail';
+    mockData.email = expectedEmail;
+    const expectedPhone = 'expectedPhone';
+    mockData.phone = expectedPhone;
+    const expectedContact = [{ field: 'field1', value: 'expectedField1' }, { field: 'field2', value: 'expectedField2' }];
+    mockData.contact = expectedContact;
+
+    const expectedRequestUrl = 'https://rest.gohighlevel.com/v1/contacts/';
+    const expectedRequestOptions = {
+      headers: {
+        Authorization: 'Bearer ' + expectedApiKey,
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      method: 'POST'
+    };
+    const expectedRequestBody = {
+      email: 'expectedEmail',
+      phone: 'expectedPhone'
+    };
+    expectedContact.forEach(contact => {
+      const obj = {};
+      obj[contact.field] = contact.value;
+      mergeObj(expectedRequestBody, obj);
+    });
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedRequestUrl);
+      assertThat(callback).isFunction();
+      assertThat(requestOptions).isEqualTo(expectedRequestOptions);
+      const parsedRequestBody = JSON.parse(requestBody);
+      assertThat(parsedRequestBody).isEqualTo(expectedRequestBody);
+
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
+- name: Should log to console, if the 'Always log to console' option is selected
+  code: "mockData.logType = 'always';\n\nconst expectedDebugMode = true;\nmock('getContainerVersion',\
+    \ () => {\n  return {\n    debugMode: expectedDebugMode\n  };\n}); \n\nmock('logToConsole',\
+    \ (logData) => {\n  const parsedLogData = JSON.parse(logData);\n  requiredConsoleKeys.forEach(p\
+    \ => assertThat(parsedLogData[p]).isDefined());\n});\n\nmock('sendHttpRequest',\
+    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);\n\
+    \nassertApi('logToConsole').wasCalled();\n"
+- name: Should log to console, if the 'Log during debug and preview' option is selected
+    AND is on preview mode
+  code: |
+    mockData.logType = 'debug';
+
+    const expectedDebugMode = true;
+    mock('getContainerVersion', () => {
+      return {
+        debugMode: expectedDebugMode
+      };
+    });
+
+    mock('logToConsole', (logData) => {
+      const parsedLogData = JSON.parse(logData);
+      requiredConsoleKeys.forEach(p => assertThat(parsedLogData[p]).isDefined());
+    });
+
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions) => {
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertApi('logToConsole').wasCalled();
+- name: Should NOT log to console, if the 'Log during debug and preview' option is
+    selected AND is NOT on preview mode
+  code: "mockData.logType = 'debug';\n\nconst expectedDebugMode = false;\nmock('getContainerVersion',\
+    \ () => {\n  return {\n    debugMode: expectedDebugMode\n  };\n}); \n\nmock('sendHttpRequest',\
+    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);\n\
+    \nassertApi('logToConsole').wasNotCalled();\n"
+- name: Should NOT log to console, if the 'Do not log' option is selected
+  code: |
+    mockData.logType = 'no';
+
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions) => {
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertApi('logToConsole').wasNotCalled();
+- name: Should log to BQ, if the 'Log to BigQuery' option is selected
+  code: "mockData.bigQueryLogType = 'always';\n\n// assertApi doesn't work for 'BigQuery.insert()'.\n\
+    // Ref: https://gtm-gear.com/posts/gtm-templates-testing/\nmock('BigQuery', ()\
+    \ => {\n  return { \n    insert: (connectionInfo, rows, options) => { \n     \
+    \ assertThat(connectionInfo).isDefined();\n      assertThat(rows).isArray();\n\
+    \      assertThat(rows).hasLength(1);\n      requiredBqKeys.forEach(p => assertThat(rows[0][p]).isDefined());\n\
+    \      assertThat(options).isEqualTo(expectedBqOptions);\n      return Promise.create((resolve,\
+    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nmock('sendHttpRequest',\
+    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);"
+- name: Should NOT log to BQ, if the 'Do not log to BigQuery' option is selected
+  code: "mockData.bigQueryLogType = 'no';\n\n// assertApi doesn't work for 'BigQuery.insert()'.\n\
+    // Ref: https://gtm-gear.com/posts/gtm-templates-testing/\nmock('BigQuery', ()\
+    \ => {\n  return { \n    insert: (connectionInfo, rows, options) => { \n     \
+    \ fail('BigQuery.insert should not have been called.');\n      return Promise.create((resolve,\
+    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nmock('sendHttpRequest',\
+    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);"
+setup: |-
+  const JSON = require('JSON');
+  const Promise = require('Promise');
+
+  function mergeObj(target, source) {
+    for (const key in source) {
+      if (source.hasOwnProperty(key)) target[key] = source[key];
+    }
+    return target;
+  }
+
+  const expectedBigQuerySettings = {
+    logBigQueryProjectId: 'logBigQueryProjectId',
+    logBigQueryDatasetId: 'logBigQueryDatasetId',
+    logBigQueryTableId: 'logBigQueryTableId'
+  };
+  const requiredConsoleKeys = ['Type', 'TraceId', 'Name'];
+  const requiredBqKeys = ['timestamp', 'type', 'trace_id', 'tag_name'];
+  const expectedBqOptions = { ignoreUnknownValues: true };
+
+  let mockData = {
+    logBigQueryProjectId: expectedBigQuerySettings.logBigQueryProjectId,
+    logBigQueryDatasetId: expectedBigQuerySettings.logBigQueryDatasetId,
+    logBigQueryTableId: expectedBigQuerySettings.logBigQueryTableId
+  };
 
 
 ___NOTES___
 
 Created on 1/2/2025, 2:58:59 PM
-
 
