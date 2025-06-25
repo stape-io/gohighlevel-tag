@@ -311,7 +311,6 @@ function log(rawDataToLog) {
   if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
   if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
 
-  // Key mappings for each log destination
   const keyMappings = {
     // No transformation for Console is needed.
     bigQuery: {
@@ -334,10 +333,10 @@ function log(rawDataToLog) {
 
     const mapping = keyMappings[logDestination];
     const dataToLog = mapping ? {} : rawDataToLog;
-    // Map keys based on the log destination
+
     if (mapping) {
       for (const key in rawDataToLog) {
-        const mappedKey = mapping[key] || key; // Fallback to original key if no mapping exists
+        const mappedKey = mapping[key] || key;
         dataToLog[mappedKey] = rawDataToLog[key];
       }
     }
@@ -357,18 +356,12 @@ function logToBigQuery(dataToLog) {
     tableId: data.logBigQueryTableId
   };
 
-  // timestamp is required.
   dataToLog.timestamp = getTimestampMillis();
 
-  // Columns with type JSON need to be stringified.
   ['request_body', 'response_headers', 'response_body'].forEach((p) => {
-    // GTM Sandboxed JSON.parse returns undefined for malformed JSON but throws post-execution, causing execution failure.
-    // If fixed, could use: dataToLog[p] = JSON.stringify(JSON.parse(dataToLog[p]) || dataToLog[p]);
     dataToLog[p] = JSON.stringify(dataToLog[p]);
   });
 
-  // assertApi doesn't work for 'BigQuery.insert()'. It's needed to convert BigQuery into a function when testing.
-  // Ref: https://gtm-gear.com/posts/gtm-templates-testing/
   const bigquery = getType(BigQuery) === 'function' ? BigQuery() /* Only during Unit Tests */ : BigQuery;
   bigquery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
 }
@@ -680,12 +673,11 @@ scenarios:
   code: "mockData.logType = 'always';\n\nconst expectedDebugMode = true;\nmock('getContainerVersion',\
     \ () => {\n  return {\n    debugMode: expectedDebugMode\n  };\n}); \n\nmock('logToConsole',\
     \ (logData) => {\n  const parsedLogData = JSON.parse(logData);\n  requiredConsoleKeys.forEach(p\
-    \ => assertThat(parsedLogData[p]).isDefined());\n});\n\nmock('sendHttpRequest',\
-    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);\n\
-    \nassertApi('logToConsole').wasCalled();\n"
+    \ => assertThat(parsedLogData[p]).isDefined());\n});\n\nrunCode(mockData);\n\n\
+    assertApi('logToConsole').wasCalled();"
 - name: Should log to console, if the 'Log during debug and preview' option is selected
     AND is on preview mode
-  code: |
+  code: |-
     mockData.logType = 'debug';
 
     const expectedDebugMode = true;
@@ -700,26 +692,17 @@ scenarios:
       requiredConsoleKeys.forEach(p => assertThat(parsedLogData[p]).isDefined());
     });
 
-    mock('sendHttpRequest', (requestUrl, callback, requestOptions) => {
-      callback(200);
-    });
-
     runCode(mockData);
 
     assertApi('logToConsole').wasCalled();
 - name: Should NOT log to console, if the 'Log during debug and preview' option is
     selected AND is NOT on preview mode
   code: "mockData.logType = 'debug';\n\nconst expectedDebugMode = false;\nmock('getContainerVersion',\
-    \ () => {\n  return {\n    debugMode: expectedDebugMode\n  };\n}); \n\nmock('sendHttpRequest',\
-    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);\n\
+    \ () => {\n  return {\n    debugMode: expectedDebugMode\n  };\n}); \n\nrunCode(mockData);\n\
     \nassertApi('logToConsole').wasNotCalled();\n"
 - name: Should NOT log to console, if the 'Do not log' option is selected
   code: |
     mockData.logType = 'no';
-
-    mock('sendHttpRequest', (requestUrl, callback, requestOptions) => {
-      callback(200);
-    });
 
     runCode(mockData);
 
@@ -731,15 +714,13 @@ scenarios:
     \ assertThat(connectionInfo).isDefined();\n      assertThat(rows).isArray();\n\
     \      assertThat(rows).hasLength(1);\n      requiredBqKeys.forEach(p => assertThat(rows[0][p]).isDefined());\n\
     \      assertThat(options).isEqualTo(expectedBqOptions);\n      return Promise.create((resolve,\
-    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nmock('sendHttpRequest',\
-    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);"
+    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nrunCode(mockData);"
 - name: Should NOT log to BQ, if the 'Do not log to BigQuery' option is selected
   code: "mockData.bigQueryLogType = 'no';\n\n// assertApi doesn't work for 'BigQuery.insert()'.\n\
     // Ref: https://gtm-gear.com/posts/gtm-templates-testing/\nmock('BigQuery', ()\
     \ => {\n  return { \n    insert: (connectionInfo, rows, options) => { \n     \
     \ fail('BigQuery.insert should not have been called.');\n      return Promise.create((resolve,\
-    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nmock('sendHttpRequest',\
-    \ (requestUrl, callback, requestOptions) => {\n  callback(200);\n});\n\nrunCode(mockData);"
+    \ reject) => {\n        resolve();\n      });\n    }\n  };\n});\n\nrunCode(mockData);"
 setup: |-
   const JSON = require('JSON');
   const Promise = require('Promise');
@@ -765,6 +746,14 @@ setup: |-
     logBigQueryDatasetId: expectedBigQuerySettings.logBigQueryDatasetId,
     logBigQueryTableId: expectedBigQuerySettings.logBigQueryTableId
   };
+
+  mock('sendHttpRequest', (url, callback, options, body) => {
+    callback(200);
+  });
+
+  mock('getRequestHeader', (header) => {
+    if (header === 'trace-id') return 'expectedTraceId';
+  });
 
 
 ___NOTES___
