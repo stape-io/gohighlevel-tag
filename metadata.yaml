@@ -1,6 +1,8 @@
 homepage: "https://stape.io/"
 documentation: "https://github.com/stape-io/gohighlevel-tag"
 versions:
+  - sha: c0ad0bff9932f22dc6af02548e811555103a1f5c
+    changeNotes: Rename tag.
   - sha: fb6c7e0c9c6d57ecd19ed43f5fe99c6ce5b39426
     changeNotes: Remove some comments. Improve tests.
   - sha: 65211ca418d5dadf505a3b779acae0cce395ef2e
