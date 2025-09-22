@@ -1,7 +1,7 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/gohighlevel-tag'
 versions:
-  - sha: 69de071e80f1d34a3957d5eeca022d6267b0de77
+  - sha: 1e1fbcbc83f2effad2169923a68b31ee3d70d904
     changeNotes: Update to API V2 using Private Integration Token.
   - sha: c0ad0bff9932f22dc6af02548e811555103a1f5c
     changeNotes: Rename tag.
