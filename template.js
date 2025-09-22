@@ -3,19 +3,17 @@ const JSON = require('JSON');
 const getRequestHeader = require('getRequestHeader');
 const getAllEventData = require('getAllEventData');
 const getTimestampMillis = require('getTimestampMillis');
-const getType = require('getType');
 const logToConsole = require('logToConsole');
 const getContainerVersion = require('getContainerVersion');
 const makeTableMap = require('makeTableMap');
 const BigQuery = require('BigQuery');
 
-/**********************************************************************************************/
-
-const traceId = getRequestHeader('trace-id');
+/*==============================================================================
+==============================================================================*/
 
 const eventData = getAllEventData();
 
-if (!isConsentGivenOrNotRequired()) {
+if (!isConsentGivenOrNotRequired(data, eventData)) {
   return data.gtmOnSuccess();
 }
 
@@ -24,18 +22,41 @@ if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
   return data.gtmOnSuccess();
 }
 
-createContact();
+createContact(data);
 
 if (data.useOptimisticScenario) {
   return data.gtmOnSuccess();
 }
 
-/**********************************************************************************************/
-// Helpers
+/*==============================================================================
+  Vendor related functions
+==============================================================================*/
 
-function createContact() {
-  const requestUrl = 'https://rest.gohighlevel.com/v1/contacts/';
+function generateRequestUrl() {
+  return 'https://services.leadconnectorhq.com/contacts/';
+}
+
+function generateRequestOptions(data) {
+  const version = '2021-07-28';
+  const options = {
+    headers: {
+      Authorization: 'Bearer ' + data.privateIntegrationToken,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Version: version
+    },
+    method: 'POST'
+  };
+
+  return options;
+}
+
+function createContact(data) {
+  const requestUrl = generateRequestUrl();
+  const requestOptions = generateRequestOptions(data);
   const postBody = makeTableMap(data.contact || [], 'field', 'value') || {};
+
+  postBody.locationId = data.locationId;
 
   if (data.email) postBody.email = data.email;
   if (data.phone) postBody.phone = data.phone;
@@ -43,7 +64,6 @@ function createContact() {
   log({
     Name: 'GoHighLevel',
     Type: 'Request',
-    TraceId: traceId,
     EventName: 'Contact',
     RequestMethod: 'POST',
     RequestUrl: requestUrl,
@@ -56,7 +76,6 @@ function createContact() {
       log({
         Name: 'GoHighLevel',
         Type: 'Response',
-        TraceId: traceId,
         EventName: 'Contact',
         ResponseStatusCode: statusCode,
         ResponseHeaders: headers,
@@ -64,29 +83,20 @@ function createContact() {
       });
 
       if (!data.useOptimisticScenario) {
-        if (statusCode >= 200 && statusCode < 303) {
-          data.gtmOnSuccess();
-        } else {
-          data.gtmOnFailure();
-        }
+        if (statusCode >= 200 && statusCode < 303) data.gtmOnSuccess();
+        else data.gtmOnFailure();
       }
     },
-    {
-      headers: {
-        Authorization: 'Bearer ' + data.apiKey,
-        Accept: 'application/json',
-        'Content-Type': 'application/json'
-      },
-      method: 'POST'
-    },
+    requestOptions,
     JSON.stringify(postBody)
   );
 }
 
-/**********************************************************************************************/
-// Helpers
+/*==============================================================================
+  Helpers
+==============================================================================*/
 
-function isConsentGivenOrNotRequired() {
+function isConsentGivenOrNotRequired(data, eventData) {
   if (data.adStorageConsent !== 'required') return true;
   if (eventData.consent_state) return !!eventData.consent_state.ad_storage;
   const xGaGcs = eventData['x-ga-gcs'] || ''; // x-ga-gcs is a string like "G110"
@@ -97,6 +107,8 @@ function log(rawDataToLog) {
   const logDestinationsHandlers = {};
   if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
   if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
+
+  rawDataToLog.TraceId = getRequestHeader('trace-id');
 
   const keyMappings = {
     // No transformation for Console is needed.
@@ -149,13 +161,15 @@ function logToBigQuery(dataToLog) {
     dataToLog[p] = JSON.stringify(dataToLog[p]);
   });
 
-  const bigquery = getType(BigQuery) === 'function' ? BigQuery() /* Only during Unit Tests */ : BigQuery;
-  bigquery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
+  BigQuery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
 }
 
 function determinateIsLoggingEnabled() {
   const containerVersion = getContainerVersion();
-  const isDebug = !!(containerVersion && (containerVersion.debugMode || containerVersion.previewMode));
+  const isDebug = !!(
+    containerVersion &&
+    (containerVersion.debugMode || containerVersion.previewMode)
+  );
 
   if (!data.logType) {
     return isDebug;
