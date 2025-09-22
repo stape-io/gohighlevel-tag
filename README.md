@@ -2,7 +2,7 @@
 
 The **GoHighLevel Tag** for Google Tag Manager Server-Side allows you to send data to the GoHighLevel API.
 
-## You can use this tag to
+## Use Cases
 
 - Create new contacts
 - Track events _(coming soon)_
