@@ -39,7 +39,7 @@ ___TEMPLATE_PARAMETERS___
     "name": "privateIntegrationToken",
     "displayName": "Private Integration Token",
     "simpleValueType": true,
-    "help": "\u003ca href\u003d\"https://marketplace.gohighlevel.com/docs/Authorization/PrivateIntegrationsToken#how-do-i-manage-private-integrations\"\u003eLearn more\u003c/a\u003e about how to manage and create the Private Integration Token.\n\u003cbr/\u003e\nIt must be created in the Sub-Account level, not Agency level.\n\u003cbr/\u003e\u003cbr/\u003e\nThe token \u003cb\u003emust\u003c/b\u003e have the following scopes:\n\u003cul\u003e\n\u003cli\u003e\u003cb\u003e\u003ci\u003econtacts.write\u003c/i\u003e\u003c/b\u003e or \u003cb\u003eEdit Contacts\u003c/b\u003e\u003c/li\u003e\n\u003c/ul\u003e",
+    "help": "\u003ca href\u003d\"https://marketplace.gohighlevel.com/docs/Authorization/PrivateIntegrationsToken/#how-do-i-manage-private-integrations\"\u003eLearn more\u003c/a\u003e about how to manage and create the Private Integration Token.\n\u003cbr/\u003e\nIt must be created in the Sub-Account level, not Agency level.\n\u003cbr/\u003e\u003cbr/\u003e\nThe token \u003cb\u003emust\u003c/b\u003e have the following scopes:\n\u003cul\u003e\n\u003cli\u003e\u003cb\u003e\u003ci\u003econtacts.write\u003c/i\u003e\u003c/b\u003e or \u003cb\u003eEdit Contacts\u003c/b\u003e\u003c/li\u003e\n\u003c/ul\u003e",
     "valueValidators": [
       {
         "type": "NON_EMPTY"
@@ -76,7 +76,7 @@ ___TEMPLATE_PARAMETERS___
       {
         "type": "LABEL",
         "name": "contactLabel",
-        "displayName": "\u003ca href\u003d\"https://marketplace.gohighlevel.com/docs/ghl/contacts/create-contact\" target\u003d\"_blank\"\u003eLearn more\u003c/a\u003e about the Contact Fields."
+        "displayName": "\u003ca href\u003d\"https://marketplace.gohighlevel.com/docs/ghl/contacts/create-contact/#request\" target\u003d\"_blank\"\u003eLearn more\u003c/a\u003e about the Contact Fields."
       },
       {
         "type": "TEXT",
