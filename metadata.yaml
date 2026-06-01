@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/gohighlevel-tag'
 versions:
+  - sha: e3ce9b17549c11eda476f1e134f88f7a87b51f04
+    changeNotes: Logging removal.
   - sha: 1e1fbcbc83f2effad2169923a68b31ee3d70d904
     changeNotes: Update to API V2 using Private Integration Token.
   - sha: c0ad0bff9932f22dc6af02548e811555103a1f5c
